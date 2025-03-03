@@ -1,0 +1,10 @@
+[project]
+name = "nav2024-2025"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "opencv-python>=4.11.0.86",
+    "scikit-image>=0.25.2",
+]

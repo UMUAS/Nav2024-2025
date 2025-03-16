@@ -7,7 +7,9 @@ from skimage.measure import label, regionprops
 from skimage.transform import hough_circle, hough_circle_peaks
 
 #video_path = "./Traditional_IR_Filtering/Videos/video_15_out.avi"
-video_path = "./Traditional_IR_Filtering/Videos/video_10metres.mp4"
+#video_path = "./Traditional_IR_Filtering/Videos/video_10metres.mp4"
+video_path = "./Traditional_IR_Filtering/Videos/video_20metres_out.avi"
+
 cap = cv2.VideoCapture(video_path)
 
 # Multiprocessing Parameters
@@ -36,7 +38,7 @@ def process_frame(frame):
     mask = np.zeros_like(binary_image, dtype=bool)
     
     for region in regionprops(labeled_img):
-        if 30 <= region.area <= 500 and region.eccentricity < 0.68:
+        if 10 <= region.area <= 500 and region.eccentricity < 0.68:
             mask[labeled_img == region.label] = True
     
     # Apply Canny Edge Detection

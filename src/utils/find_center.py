@@ -1,56 +1,54 @@
 import numpy as np
 import cv2 as cv
 
-#Just use a thresholded image here for src_img. Any pixel that is not black (0,0,0) will be considered for the center calculations
-# src_img = cv.imread("images/thresholded.png", cv.IMREAD_GRAYSCALE)
-src_img = np.zeros((500, 600, 1), dtype=np.uint8)
-img = src_img.copy()
+######################
+# Utility Functions: #
+######################
 
-def handleMouse(event, x, y, flags, _):
-    global img
-    if(event == cv.EVENT_LBUTTONDOWN):
-        img = cv.circle(img, (x,y), 1, (255, 255, 255), 10)
-        createRegion()
-    if(event == cv.EVENT_RBUTTONDOWN):
-        img = src_img.copy()
-        createRegion()
+def pixel_distance_from_box_center_to_image_center(img:cv.Mat, boundingBox:cv.typing.Rect) -> tuple[int, int]:
+    boxCenter = get_bb_center(boundingBox)
+    imgCenter = get_img_center(img)
+    return (imgCenter[0]-boxCenter[0], imgCenter[1]-boxCenter[1])
 
-def createRegion():
-    global img
-
-    bounds = [0,0,0,0] #x1,y1,x2,y2
-    non_zero = cv.findNonZero(img)
-    isEmpty = non_zero is None
-    if not isEmpty:
-        x,y,w,h = cv.boundingRect(non_zero)
-        bounds = [x,y,x+w,y+h]
-    
-    boxCenter = ((bounds[0]+bounds[2])//2, (bounds[1]+bounds[3])//2) #Center of bounding box
-    imgCenter = (img.shape[1]//2, img.shape[0]//2)
-
-    moveX, moveY = (0,0)
-    if(imgCenter[0] > boxCenter[0]):
-        moveX = 1 #Move Right
-    elif(imgCenter[0] <= boxCenter[0]):
-        moveX = -1 #Move Left
-
-    if(imgCenter[1] > boxCenter[1]):
-        moveY = 1 #Move Up
-    elif(imgCenter[1] <= boxCenter[1]):
-        moveY = -1 #Move Down
-    
+def find_centroid_from_binary_image(img:cv.Mat) -> tuple[int,int]:
+    '''Returns: Centroid (x,y) or (-1,-1) if image is zero (black).'''
     M = cv.moments(img)
-    if(not isEmpty):
+    centroid = (-1, -1)
+    non_zero = cv.findNonZero(img)
+    if(non_zero is not None):
         cX = int(M["m10"] / M["m00"])
         cY = int(M["m01"] / M["m00"])
         centroid = (cX, cY)
-    else:
-        centroid = (-1, -1) #Not found
+    return centroid
 
-    print(f'Box Center: {boxCenter}, Image Center: {imgCenter}, Centroid: {centroid}, moveX: {moveX}, moveY: {moveY}')
-    overlayedImg = cv.cvtColor(img, cv.COLOR_GRAY2RGB)
-    if(not isEmpty):
-        cv.rectangle(overlayedImg, (bounds[0], bounds[1]), (bounds[2], bounds[3]), (255, 255, 255), 1) #Box edges display
+def get_bb_center(boundingBox:cv.typing.Rect) -> tuple[int, int]:
+    '''Returns: Center (x,y)'''
+    return (boundingBox[0]+boundingBox[2]//2, boundingBox[1]+boundingBox[3]//2)
+
+def get_img_center(img:cv.Mat) -> tuple[int,int]:
+    return (img.shape[1]//2, img.shape[0]//2)
+
+###########################
+# Functions for the demo: #
+###########################
+
+def handleMouse(event, x, y, flags, src_img):
+    if(event == cv.EVENT_LBUTTONDOWN):
+        src_img = cv.circle(src_img, (x,y), 1, (255, 255, 255), 10)
+        createRegion(src_img)
+
+def createRegion(src_img):
+    non_zero = cv.findNonZero(src_img)
+    bb = cv.boundingRect(non_zero)
+    boxCenter = get_bb_center(bb)
+    imgCenter = get_img_center(src_img)
+    distance = pixel_distance_from_box_center_to_image_center(src_img, bb)
+    centroid = find_centroid_from_binary_image(src_img)
+
+    print(f'Centroid: {centroid}, bb center distance to image center: {distance}')
+    overlayedImg = cv.cvtColor(src_img, cv.COLOR_GRAY2RGB)
+    if(non_zero is not None):
+        cv.rectangle(overlayedImg, bb, (255, 255, 255), 1) #Box edges display
         cv.circle(overlayedImg, boxCenter, 1, (0, 0, 255), 5) #Box center display
         cv.circle(overlayedImg, centroid, 1, (0, 255, 255), 5) #Centroid display
     
@@ -59,11 +57,24 @@ def createRegion():
     #Final Image With Overlay
     cv.imshow('image', overlayedImg)
 
-#Create UI
-cv.namedWindow('image')
-cv.setMouseCallback('image', handleMouse)
+def main():
+    #Just use a thresholded image here for src_img. Any pixel that is not black (0,0,0) will be considered for the center calculations
+    SOURCE_IMAGE_PATH = "./images/thresholded.png"
+    SOURCE_IMAGE = cv.imread(SOURCE_IMAGE_PATH, cv.IMREAD_GRAYSCALE)
 
-cv.imshow('image', img)
+    if(SOURCE_IMAGE is None):
+        print('Source image was not found.')
+        return
 
-cv.waitKey(0)
-cv.destroyAllWindows()
+    img = SOURCE_IMAGE.copy()
+
+    cv.namedWindow('image')
+    cv.setMouseCallback('image', handleMouse, img)
+    cv.imshow('image', img)
+
+    cv.waitKey(0)
+    cv.destroyAllWindows()
+
+#Perform demo:
+if __name__ == '__main__':
+    main()

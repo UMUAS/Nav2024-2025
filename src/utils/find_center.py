@@ -59,7 +59,7 @@ def createRegion(src_img):
 
 def main():
     #Just use a thresholded image here for src_img. Any pixel that is not black (0,0,0) will be considered for the center calculations
-    SOURCE_IMAGE_PATH = "./images/thresholded.png"
+    SOURCE_IMAGE_PATH = "./src/Traditional_IR_Filtering/Images/thresholded.png"
     SOURCE_IMAGE = cv.imread(SOURCE_IMAGE_PATH, cv.IMREAD_GRAYSCALE)
 
     if(SOURCE_IMAGE is None):

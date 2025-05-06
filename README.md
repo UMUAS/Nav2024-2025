@@ -9,3 +9,4 @@ The main script is a CLI, offering features to be used quickly in real time by t
 3. Enter "3" to initiate IR Detection
 4. Enter "4" to generate KML file
 
+For help with arguments, run `python src/main.py --help`

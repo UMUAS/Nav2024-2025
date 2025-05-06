@@ -50,7 +50,7 @@ class App(object):
     
     def createTracker(self):
         algo = self.trackerAlgorithm.lower()
-        if algo == 'boosting': #BOOSTING
+        if algo == 'boosting':
             tracker = cv.legacy.TrackerBoosting.create()
         elif algo == 'mil':
             tracker = cv.TrackerMIL.create()
@@ -74,22 +74,22 @@ class App(object):
             params.model = self.args.dasiamrpn_net
             params.kernel_cls1 = self.args.dasiamrpn_kernel_cls1
             params.kernel_r1 = self.args.dasiamrpn_kernel_r1
-            params.backend = args.backend
-            params.target = args.target
+            params.backend = self.args.backend
+            params.target = self.args.target
             tracker = cv.TrackerDaSiamRPN.create(params)
         elif algo == 'nanotrack':
             params = cv.TrackerNano_Params()
-            params.backbone = args.nanotrack_backbone
-            params.neckhead = args.nanotrack_headneck
-            params.backend = args.backend
-            params.target = args.target
+            params.backbone = self.args.nanotrack_backbone
+            params.neckhead = self.args.nanotrack_headneck
+            params.backend = self.args.backend
+            params.target = self.args.target
             tracker = cv.TrackerNano.create(params)
         elif algo == 'vittrack':
             params = cv.TrackerVit_Params()
-            params.net = args.vittrack_net
-            params.tracking_score_threshold = args.tracking_score_threshold
-            params.backend = args.backend
-            params.target = args.target
+            params.net = self.args.vittrack_net
+            params.tracking_score_threshold = self.args.tracking_score_threshold
+            params.backend = self.args.backend
+            params.target = self.args.target
             tracker = cv.TrackerVit.create(params)
         else:
             sys.exit(f"Tracker {self.trackerAlgorithm} is not recognized. Valid algorithms: {TRACKER_TYPES}")
@@ -113,8 +113,11 @@ class App(object):
 
             return
     
-    def run(self):
+    def run(self) -> any:
+        self.running = True
+
         video_capture = cv.VideoCapture(0)
+
         if not video_capture.isOpened(): # try to get the first frame
             print('Error: Unable to access the camera.')
             return
@@ -124,12 +127,12 @@ class App(object):
             print("Failed to read first frame.")
             return
         
-        cv.namedWindow(WINDOW_NAME)
+        # cv.namedWindow(WINDOW_NAME)
         
         prev_frame_time = 0
         new_frame_time = 0
 
-        while True:
+        while self.running:
             rval, frame = video_capture.read()
             if not rval:
                 print('Failed to read frame.')
@@ -139,23 +142,23 @@ class App(object):
             
             success = False
 
-            key = cv.waitKey(5)
-            if key == 27: # exit on ESC
-                break
-            elif key == ord('s'): #Enable tracking.
+            # key = cv.waitKey(5)
+            # if key == 27: # exit on ESC
+            #     break
+            # elif key == ord('s'): #Enable tracking.
                 
-                if(self.bounding_box is not None):
-                    self.bounding_box = None
-                    self.tracker = self.createTracker() #Reset tracker
-                else:
-                    self.initializeTracker(frame)
+            #     if(self.bounding_box is not None):
+            #         self.bounding_box = None
+            #         self.tracker = self.createTracker() #Reset tracker
+            #     else:
+            #         self.initializeTracker(frame)
 
-            if self.bounding_box is not None:
-                success, box = self.tracker.update(frame)
-                self.bounding_box = box
-                if success:
-                    x, y, w, h = [int(v) for v in box]
-                    cv.rectangle(frame, (x,y), (x+w, y+h), (0, 255, 0), 2)
+            # if self.bounding_box is not None:
+            #     success, box = self.tracker.update(frame)
+            #     self.bounding_box = box
+            #     if success:
+            #         x, y, w, h = [int(v) for v in box]
+            #         cv.rectangle(frame, (x,y), (x+w, y+h), (0, 255, 0), 2)
 
             #FPS:
             new_frame_time = time.time()
@@ -168,11 +171,16 @@ class App(object):
             if not success:
                 cv.putText(frame, f"Lost object!", (10, 60), cv.FONT_HERSHEY_SIMPLEX, 0.5, (20, 20, 200), 1, cv.LINE_AA)
 
-            cv.imshow(WINDOW_NAME, frame)
+            # cv.imshow(WINDOW_NAME, frame)
+            return frame
 
         print('Done.')
         video_capture.release()
     
+    def interrupt(self):
+        ...
+        self.running = False
+
     def processImage(self, image) -> any:
         new_image = cv.resize(image, (int(image.shape[1]*RESOLUTION_SCALE), int(image.shape[0]*RESOLUTION_SCALE)))
         return new_image
@@ -180,9 +188,7 @@ class App(object):
     def get_bounding_box(self):
         return self.bounding_box
 
-if __name__ == "__main__":
-    print(__doc__)
-
+def setupArgs() -> any:
     parser = argparse.ArgumentParser(description="Run tracker")
     # parser.add_argument("--input", type=str, default="vtest.avi", help="Path to video source")
     parser.add_argument("--tracker_algo", type=str, default=DEFAULT_TRACKER_TYPE, help="One of available tracking algorithms: mil, goturn, dasiamrpn, nanotrack, vittrack")
@@ -195,7 +201,7 @@ if __name__ == "__main__":
     parser.add_argument("--nanotrack_headneck", type=str, default="models/nanotrack_head_sim.onnx", help="Path to onnx model of NanoTrack headNeck")
     parser.add_argument("--vittrack_net", type=str, default="models/vitTracker.onnx", help="Path to onnx model of  vittrack")
     parser.add_argument('--tracking_score_threshold', type=float,  help="Tracking score threshold. If a bbox of score >= 0.3, it is considered as found ")
-    parser.add_argument('--backend', choices=backends, default=cv.dnn.DNN_BACKEND_CUDA, type=int,
+    parser.add_argument('--backend', choices=backends, default=cv.dnn.DNN_BACKEND_DEFAULT, type=int,
                 help="Choose one of computation backends: "
                         "%d: automatically (by default), "
                         "%d: Halide language (http://halide-lang.org/), "
@@ -204,7 +210,7 @@ if __name__ == "__main__":
                         "%d: VKCOM, "
                         "%d: CUDA"% backends)
     #default: DNN_BACKEND_DEFAULT
-    parser.add_argument("--target", choices=targets, default=cv.dnn.DNN_TARGET_CUDA, type=int,
+    parser.add_argument("--target", choices=targets, default=cv.dnn.DNN_TARGET_CPU, type=int,
                 help="Choose one of target computation devices: "
                         '%d: CPU target (by default), '
                         '%d: OpenCL, '
@@ -215,6 +221,11 @@ if __name__ == "__main__":
                         '%d: CUDA fp16 (half-float preprocess)'% targets)
     #default: DNN_TARGET_CPU
 
-    args = parser.parse_args()
+    return parser.parse_args()
+
+if __name__ == "__main__":
+    print(__doc__)
+    args = setupArgs()
+    
     App(args).run()
     cv.destroyWindow(WINDOW_NAME)

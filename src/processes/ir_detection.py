@@ -1,5 +1,5 @@
 def do_ir_detection():
-    global hotspot_data, save_state, current_coordinates, print_hotspots, is_valid_index, get_valid_coordinate
+    global hotspot_data, current_coordinates, get_valid_coordinate, save_state, print_hotspots, is_valid_index
     '''
     === IR Detection ===
     Options:

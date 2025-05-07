@@ -1,14 +1,11 @@
 import os
 import json
 import threading
+import simplekml
+import socket
 
 import argparse 
 from pymavlink import mavutil
-from processes.ir_detection import do_ir_detection 
-from processes.source_detection import do_source_detection
-from processes.kml_generation import do_kml_generation
-from processes.kml_transmit import do_kml_transmit
-from processes.get_current_coordinates import do_get_current_coordinates
 
 #Global Variables 
 #---------------------------------------------------------------------------------------------#
@@ -25,9 +22,23 @@ program_data = {}
 def establish_mavlink_connection():
     global program_data, mavlink_connection
     # mavlink_connection = mavutil.mavlink_connection(f'udp:{program_data["udp_address"]}:{program_data["udp_port"]}')
-    mavlink_connection = mavutil.mavlink_connection('/dev/ttyTHS1', baud=921600)
+    mavlink_connection = mavutil.mavlink_connection('/dev/ttyTHS1', baud=57600) #FINALY WORKED
     mavlink_connection.wait_heartbeat()
     print("[o] Mavlink connection established")
+
+def do_get_current_coordinates(mavlink_connection):
+    # Should be run as a separate thread to constantly update current coordinates
+    global current_coordinates
+
+    while True:
+        try:
+            msg = mavlink_connection.recv_match(blocking=True, timeout=1)
+            if msg and msg.get_type() == "GLOBAL_POSITION_INT":
+                latitude = msg.lat / 1e7  # Convert to decimal degrees
+                longitude = msg.lon / 1e7
+                current_coordinates = (latitude, longitude)
+        except Exception as e:
+            print(f"[x] Error receiving MAVLink message: {e}")
 
 def get_valid_coordinate(prompt, min_val, max_val):
     while True:
@@ -66,7 +77,191 @@ def init_coordinates_thread():
     coordinates_thread = threading.Thread(target=do_get_current_coordinates, args=[mavlink_connection], daemon=True)
     coordinates_thread.start()
 
+# Processes
+#
+#
 
+def do_source_detection():
+    global current_coordinates, hotspot_data
+
+    options = ["pos", "desc", "info", "exit"]
+
+    while True:
+        print(
+'''
+=== Fire Source Detection ===
+Options:
+"pos"  - Set coordinates as the current GPS position.
+"desc" - Set description.
+"info" - Current source information.
+"exit" - Exit source detection.
+'''
+        )
+        choice = input('Choose option: ').strip().lower()
+
+        while choice not in options:
+            choice = input('Invalid input! Try again: ').strip().lower()
+
+        if choice == 'exit':
+            print('[o] Exiting source detection.')
+            save_state()
+            print('[o] Program state saved to JSON file.')
+            break
+
+        elif choice == 'pos':
+            confirm = input('[!] Are you sure you want to update coordinates for the Fire Source? (y/n): ').strip().lower()
+            if confirm != 'y':
+                continue
+            if current_coordinates:
+                hotspot_data['source']['coordinates'] = current_coordinates
+                save_state()
+                print('[o] Fire Source coordinates updated and program state saved.')
+            else:
+                print('[x] No current coordinates available.')
+
+        elif choice == 'desc':
+            current_desc = hotspot_data['source'].get('description', '')
+            print(f'Current source description:\n{current_desc}')
+            new_desc = input('Change description to (or enter "cancel"):\n').strip()
+            if new_desc.lower() == 'cancel':
+                continue
+            hotspot_data['source']['description'] = new_desc
+            save_state()
+            print('[o] Fire Source description updated and program state saved.')
+
+        elif choice == 'info':
+            desc = hotspot_data['source'].get('description', '[none]')
+            coords = hotspot_data['source'].get('coordinates', '[none]')
+            print(f'[i] Source description:\n{desc}')
+            print(f'[i] Source coordinates:\n{coords}')
+
+def do_ir_detection():
+    global hotspot_data, current_coordinates
+
+    options = ["add", "rem", "set", "list", "exit"]
+
+    while True:
+        print(
+'''
+=== IR Detection ===
+Options:
+"add" - Add current GPS position as IR source.
+"rem" - Remove an IR source.
+"set" - Change coordinates of an IR source.
+"list" - List of IR sources added.
+"exit" - Exit IR detection.
+'''
+        )
+        option = input('Choose option: ').lower()
+
+        while option not in options:
+            option = input('Invalid input! Try again: ').lower()
+
+        if option == 'exit':
+            print('[o] Exiting IR detection.')
+            save_state()
+            print("[o] Program state saved to JSON file")
+            break
+
+        elif option == 'add':
+            hotspot_data["hotspots"].append(current_coordinates)
+            save_state()
+            print("[o] New hotspot added and program state saved to JSON file")
+
+        elif option == 'rem':
+            print_hotspots()
+            print('[i] Remove a hotspot by its index in the list. To cancel, type "cancel".')
+
+            index_str = input('Choose index: ').lower()
+            while (not index_str.isnumeric() and index_str != "cancel") or \
+                  (index_str.isnumeric() and not is_valid_index(int(index_str))):
+                index_str = input('Invalid input! Try again: ').lower()
+
+            if index_str == 'cancel':
+                continue
+            else:
+                hotspot_index = int(index_str)
+                hotspot_data["hotspots"].pop(hotspot_index)
+                save_state()
+                print("[o] Hotspot removed and program state saved to JSON file")
+
+        elif option == 'set':
+            print_hotspots()
+            print("Modify Hotspot coordinates by its index in the list. To cancel, type 'cancel'.")
+
+            index_str = input("Choose hotspot: ").lower()
+            while (not index_str.isnumeric() and index_str != "cancel") or (index_str.isnumeric() and not is_valid_index(int(index_str))):
+                index_str = input('Invalid input! Try again: ').lower()
+
+            if index_str == "cancel":
+                continue
+            else:
+                hotspot_index = int(index_str)
+                latitude = get_valid_coordinate("Enter latitude (-90 to 90): ", -90, 90)
+                longitude = get_valid_coordinate("Enter longitude (-180 to 180): ", -180, 180)
+                hotspot_data["hotspots"][hotspot_index] = (longitude, latitude)
+                save_state()
+                print("[o] Hotspot data modified and program state saved to JSON file")
+
+        elif option == 'list':
+            print_hotspots()
+
+def do_kml_generation():
+    global program_data, hotspot_data
+    try:
+        kml = simplekml.Kml()
+
+        for i, hotspot in enumerate(hotspot_data.get("hotspots", [])):
+            kml.newpoint(name=f"Hotspot {i+1}", coords=[hotspot])
+
+        source_coords = hotspot_data.get("source", {}).get("coordinates")
+        source_desc = hotspot_data.get("source", {}).get("description", "")
+
+        if source_coords:
+            kml.newpoint(name="Source", coords=[source_coords], description=source_desc)
+
+        kml.save(program_data["kml_file_path"])
+        print(f'[o] KML file saved to -> {program_data["kml_file_path"]}')
+
+    except Exception as e:
+        print(f'[x] Error occurred generating KML file: {e}')
+
+def do_kml_transmit():
+    global program_data
+
+    if not os.path.exists(program_data["kml_file_path"]):
+        print(f'[x] KML file not found at {program_data["kml_file_path"]}')
+        return
+
+    try:
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
+            sock.bind((program_data["kml_server_address"], int(program_data["kml_server_port"])))
+            sock.listen(1)
+            sock.settimeout(60)
+            print(f'[i] KML server listening on {program_data["kml_server_address"]}:{program_data["kml_server_port"]}...')
+
+            while True:
+                try:
+                    conn, addr = sock.accept()
+                    with conn:
+                        print(f'[o] Connected to receiver at {addr}')
+                        with open(program_data["kml_file_path"], "rb") as f:
+                            while True:
+                                chunk = f.read(1024)
+                                if not chunk:
+                                    break
+                                conn.sendall(chunk)
+                        print('[o] KML file sent successfully')
+                except socket.timeout:
+                    print('[x] No connections within timeout period.')
+
+                user_input = input('[?] Keep server alive for another connection? (y/n): ').strip().lower()
+                if user_input != 'y':
+                    print('[i] Shutting down KML server.')
+                    break
+
+    except Exception as e:
+        print(f'[x] Failed to start/send KML file: {e}')
 
 # Main Function Logic 
 #---------------------------------------------------------------------------------------------#
@@ -88,15 +283,6 @@ def main():
     # parser.add_argument("-ua","--uaddress",help="mavlink udp address",default="127.0.0.1")
     
     args = parser.parse_args()
-
-    #error handling for argparser 
-    #only run when 1 intruction is called (i.e program cant perform ir_detection, source detection, ... simultaneously )
-    if sum([args.source, args.generate, args.transmit, args.ir]) > 1:
-        print("[x] program can't perform more than 1 instruction at a time. exiting ...")
-        exit()
-    if sum([args.source, args.generate, args.transmit, args.ir]) == 0:
-        print('[x] no instruction passed. exiting ...')
-        exit()
     
     #update program global variables 
     # program_data["udp_port"] = args.uport 
@@ -116,10 +302,10 @@ def main():
     except FileNotFoundError:
         hotspot_data = {"hotspots": [], "source": {"description": "", "coordinates": ""}}
 
-    options = [1,2,3,4,'exit']
+    options = ['1','2','3','4','exit']
 
     # Run Appropriate Processes
-    establish_mavlink_connection()
+    # establish_mavlink_connection()
 
     while True:
         print('''
@@ -135,16 +321,16 @@ def main():
             opt = input('Invalid input! Try again: ').lower()
 
         if(opt == '1'):
-            init_coordinates_thread()
+            # init_coordinates_thread()
             do_ir_detection()
         elif(opt == '2'):
-            init_coordinates_thread()
+            # init_coordinates_thread()
             do_source_detection()
         elif(opt == '3'):
             do_kml_generation()
         elif(opt == '4'):
             do_kml_transmit()
-        else:
+        else: #exit
             break
             
     save_state()

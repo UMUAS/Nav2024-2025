@@ -24,7 +24,8 @@ program_data = {}
 #---------------------------------------------------------------------------------------------#
 def establish_mavlink_connection():
     global program_data, mavlink_connection
-    mavlink_connection = mavutil.mavlink_connection(f'udp:{program_data["udp_address"]}:{program_data["udp_port"]}')
+    # mavlink_connection = mavutil.mavlink_connection(f'udp:{program_data["udp_address"]}:{program_data["udp_port"]}')
+    mavlink_connection = mavutil.mavlink_connection('/dev/ttyTHS1', baud=921600)
     mavlink_connection.wait_heartbeat()
     print("[o] Mavlink connection established")
 
@@ -74,17 +75,17 @@ def main():
     global hotspot_data, program_data
     parser = argparse.ArgumentParser(description='UMUAS Hotspot Detection Program')
  
-    parser.add_argument("-i","--ir",help='initiate IR detection routine', required=False, action='store_true')
-    parser.add_argument("-s","--source",help='initiate Source detection routine', required=False, action='store_true')
-    parser.add_argument('-g',"--generate",help='initiate KML generation', required=False, action="store_true")
-    parser.add_argument('-t',"--transmit", help="transmit kml file", required=False, action="store_true")
+    # parser.add_argument("-i","--ir",help='initiate IR detection routine', required=False, action='store_true')
+    # parser.add_argument("-s","--source",help='initiate Source detection routine', required=False, action='store_true')
+    # parser.add_argument('-g',"--generate",help='initiate KML generation', required=False, action="store_true")
+    # parser.add_argument('-t',"--transmit", help="transmit kml file", required=False, action="store_true")
 
     parser.add_argument("-j", "--json", help="json file for storing", required=False, default="state.json")
     parser.add_argument("-kf","--kmlfile", help="file to generate kml data in", default="hotspots.kml")
     parser.add_argument("-ka","--kmlserver",help="kml server address. Defaults to 0.0.0.0",default="0.0.0.0")
     parser.add_argument("-kp","--kmlport",help="kml server port number. Defaults to 5000",default=5000)
-    parser.add_argument("-up","--uport", help="mavlink udp port. Defaults to",default="14550")
-    parser.add_argument("-ua","--uaddress",help="mavlink udp address",default="127.0.0.1")
+    # parser.add_argument("-up","--uport", help="mavlink udp port. Defaults to 14550",default="14550")
+    # parser.add_argument("-ua","--uaddress",help="mavlink udp address",default="127.0.0.1")
     
     args = parser.parse_args()
 
@@ -98,8 +99,8 @@ def main():
         exit()
     
     #update program global variables 
-    program_data["udp_port"] = args.uport 
-    program_data["udp_address"] = args.uaddress
+    # program_data["udp_port"] = args.uport 
+    # program_data["udp_address"] = args.uaddress
     program_data["kml_file_path"] = args.kmlfile
     program_data["kml_server_port"] = args.kmlport 
     program_data["kml_server_address"] = args.kmlserver 
@@ -115,19 +116,37 @@ def main():
     except FileNotFoundError:
         hotspot_data = {"hotspots": [], "source": {"description": "", "coordinates": ""}}
 
+    options = [1,2,3,4,'exit']
+
     # Run Appropriate Processes
     establish_mavlink_connection()
-    if args.ir:
-        init_coordinates_thread()
-        do_ir_detection()
-    elif args.source:
-        init_coordinates_thread()
-        do_source_detection()
-    elif args.generate:
-        do_kml_generation()
-    elif args.transmit:
-        do_kml_transmit()
-        
+
+    while True:
+        print('''
+              Options:
+              1 - Do IR detection
+              2 - Do Source detection
+              3 - Do KML generation
+              4 - Transit KML
+              exit - To exit program.
+              ''')
+        opt = input('Select option: ').lower()
+        while opt not in options:
+            opt = input('Invalid input! Try again: ').lower()
+
+        if(opt == '1'):
+            init_coordinates_thread()
+            do_ir_detection()
+        elif(opt == '2'):
+            init_coordinates_thread()
+            do_source_detection()
+        elif(opt == '3'):
+            do_kml_generation()
+        elif(opt == '4'):
+            do_kml_transmit()
+        else:
+            break
+            
     save_state()
     print('[o] Program ended.')
 

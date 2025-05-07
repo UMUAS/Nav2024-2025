@@ -12,7 +12,7 @@ def do_kml_generation():
         source_desc = hotspot_data.get("source", {}).get("description", "")
 
         if source_coords:
-            kml.newpoint(name="Fire Source", coords=[source_coords], description=source_desc)
+            kml.newpoint(name="Source", coords=[source_coords], description=source_desc)
 
         kml.save(program_data["kml_file_path"])
         print(f'[o] KML file saved to -> {program_data["kml_file_path"]}')

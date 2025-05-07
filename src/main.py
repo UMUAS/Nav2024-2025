@@ -21,7 +21,6 @@ program_data = {}
 #---------------------------------------------------------------------------------------------#
 def establish_mavlink_connection():
     global program_data, mavlink_connection
-    # mavlink_connection = mavutil.mavlink_connection(f'udp:{program_data["udp_address"]}:{program_data["udp_port"]}')
     mavlink_connection = mavutil.mavlink_connection('/dev/ttyTHS1', baud=57600) #FINALY WORKED
     mavlink_connection.wait_heartbeat()
     print("[o] Mavlink connection established")
@@ -305,7 +304,7 @@ def main():
     options = ['1','2','3','4','exit']
 
     # Run Appropriate Processes
-    # establish_mavlink_connection()
+    establish_mavlink_connection()
 
     while True:
         print('''
@@ -321,10 +320,10 @@ def main():
             opt = input('Invalid input! Try again: ').lower()
 
         if(opt == '1'):
-            # init_coordinates_thread()
+            init_coordinates_thread()
             do_ir_detection()
         elif(opt == '2'):
-            # init_coordinates_thread()
+            init_coordinates_thread()
             do_source_detection()
         elif(opt == '3'):
             do_kml_generation()

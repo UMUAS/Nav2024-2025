@@ -1,8 +1,6 @@
 import cv2
 import socket
-import struct
 import numpy as np
-import sys
 import threading
 
 CLIENT_IP = '127.0.0.1'  # Take first argument when program is run
@@ -55,7 +53,8 @@ def send_camera(socket:socket.socket, addr, cam_index, frame_processing:function
         if not ret:
             break
         
-        frame = frame_processing(frame)
+        if frame_processing is not None:
+            frame = frame_processing(frame)
 
         _, frame = cv2.imencode('.jpg', frame, [cv2.IMWRITE_JPEG_QUALITY, 80])
         
